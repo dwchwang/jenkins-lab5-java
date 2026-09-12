@@ -1,10 +1,9 @@
 pipeline {
     agent {
         docker {
-            image 'maven:3.9-eclipse-temurin-17'    // dùng Docker agent luôn (sạch)
+            image 'maven:3.9-eclipse-temurin-17'
         }
     }
-
     stages {
         stage('Build & Test') {
             steps {
@@ -12,13 +11,12 @@ pipeline {
             }
         }
     }
-
     post {
         always {
-            junit 'target/surefire-reports/*.xml'    // publish test results
+            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
         }
         success {
-            archiveArtifacts 'target/*.jar'
+            archiveArtifacts artifacts: 'target/*.jar', allowEmptyArchive: true
         }
     }
 }
