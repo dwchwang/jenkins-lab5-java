@@ -1,57 +1,37 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.9-eclipse-temurin-17'
-        }
+    agent any
+    environment {
+        // LƯU Ý: Đổi 'username-cua-ban' thành tên tài khoản GitHub (viết chữ THƯỜNG)
+        IMAGE = "ghcr.io/dwchwang/lab9-java"
     }
     stages {
-        stage('Quality & Build Checks') {
-            parallel {
-                stage('Unit Test') {
-                    steps {
-                        sh 'mvn test'
-                    }
-                }
-                stage('Code Style Check') {
-                    steps {
-                        // Kiểm tra biên dịch code mà không cần chạy test lại
-                        sh 'mvn compile'
-                    }
-                }
-                stage('Package Check') {
-                    steps {
-                        // Đóng gói thử JAR file
-                        sh 'mvn package -DskipTests'
-                    }
-                }
-            }
+        stage('Checkout') {
+            steps { checkout scm }
         }
-        stage('Deploy Staging') {
-            when { 
-                branch 'main' 
-            }
+        stage('Build Docker Image') {
             steps {
-                echo 'Deploying Java App to Staging (Chỉ chạy trên nhánh main)...'
+                sh 'docker build -t $IMAGE:$BUILD_NUMBER -t $IMAGE:latest .'
             }
         }
-        stage('Deploy Production') {
-            when {
-                allOf {
-                    branch 'main'
-                    expression { return env.BUILD_NUMBER.toInteger() > 0 }
+        stage('Push Image to GHCR') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'ghcr-creds',
+                    usernameVariable: 'REG_USER',
+                    passwordVariable: 'REG_PASS'
+                )]) {
+                    sh '''
+                        echo "$REG_PASS" | docker login ghcr.io -u "$REG_USER" --password-stdin
+                        docker push $IMAGE:$BUILD_NUMBER
+                        docker push $IMAGE:latest
+                    '''
                 }
             }
+        }
+        stage('Cleanup Local Images') {
             steps {
-                echo 'Deploying Java App to Production...'
+                sh 'docker rmi $IMAGE:$BUILD_NUMBER $IMAGE:latest || true'
             }
-        }
-    }
-    post {
-        always {
-            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-        }
-        success {
-            archiveArtifacts artifacts: 'target/*.jar', allowEmptyArchive: true
         }
     }
 }
